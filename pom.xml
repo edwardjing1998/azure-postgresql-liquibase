@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example.database</groupId>
@@ -10,14 +12,26 @@
     <packaging>pom</packaging>
 
     <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.build.sourceEncoding>
+            UTF-8
+        </project.build.sourceEncoding>
+
         <liquibase.version>5.0.3</liquibase.version>
         <postgresql.version>42.7.7</postgresql.version>
         <h2.version>2.3.232</h2.version>
-        <liquibase.changeLogFile>src/main/resources/db/changelog/db.changelog-master.yaml</liquibase.changeLogFile>
-        <liquibase.url>${env.LIQUIBASE_URL}</liquibase.url>
-        <liquibase.username>${env.LIQUIBASE_USERNAME}</liquibase.username>
-        <liquibase.password>${env.LIQUIBASE_PASSWORD}</liquibase.password>
+
+        <liquibase.changeLogFile>
+            src/main/resources/db/changelog/db.changelog-master.yaml
+        </liquibase.changeLogFile>
+
+        <!--
+            GitHub Actions supplies these environment variables.
+            DB_* names avoid Liquibase 5 warnings about invalid
+            native LIQUIBASE_* environment variables.
+        -->
+        <liquibase.url>${env.DB_URL}</liquibase.url>
+        <liquibase.username>${env.DB_USERNAME}</liquibase.username>
+        <liquibase.password>${env.DB_PASSWORD}</liquibase.password>
         <liquibase.driver>org.postgresql.Driver</liquibase.driver>
     </properties>
 
@@ -27,21 +41,27 @@
                 <groupId>org.liquibase</groupId>
                 <artifactId>liquibase-maven-plugin</artifactId>
                 <version>${liquibase.version}</version>
+
                 <configuration>
-                    <changeLogFile>${liquibase.changeLogFile}</changeLogFile>
+                    <changeLogFile>
+                        ${liquibase.changeLogFile}
+                    </changeLogFile>
+
                     <url>${liquibase.url}</url>
                     <username>${liquibase.username}</username>
                     <password>${liquibase.password}</password>
                     <driver>${liquibase.driver}</driver>
-                    <promptOnNonLocalDatabase>false</promptOnNonLocalDatabase>
+
                     <logLevel>info</logLevel>
                 </configuration>
+
                 <dependencies>
                     <dependency>
                         <groupId>org.postgresql</groupId>
                         <artifactId>postgresql</artifactId>
                         <version>${postgresql.version}</version>
                     </dependency>
+
                     <dependency>
                         <groupId>com.h2database</groupId>
                         <artifactId>h2</artifactId>
@@ -52,15 +72,25 @@
         </plugins>
     </build>
 
+    <!--
+        Used by the pull-request validation workflow.
+        This profile validates the changelog without connecting
+        to Azure PostgreSQL.
+    -->
     <profiles>
         <profile>
             <id>validation</id>
+
             <properties>
-                <liquibase.url>jdbc:h2:mem:liquibase_validation;MODE=PostgreSQL;DB_CLOSE_DELAY=-1</liquibase.url>
+                <liquibase.url>
+                    jdbc:h2:mem:liquibase_validation;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+                </liquibase.url>
+
                 <liquibase.username>sa</liquibase.username>
-                <liquibase.password></liquibase.password>
+                <liquibase.password/>
                 <liquibase.driver>org.h2.Driver</liquibase.driver>
             </properties>
         </profile>
     </profiles>
+
 </project>

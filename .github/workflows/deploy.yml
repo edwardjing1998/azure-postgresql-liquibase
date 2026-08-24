@@ -11,11 +11,15 @@ on:
           - dev
           - qa
           - prod
-      dry_run:
-        description: Generate SQL only; do not modify the database
+
+      deployment_mode:
+        description: Preview SQL or apply migrations
         required: true
-        type: boolean
-        default: true
+        type: choice
+        options:
+          - preview
+          - apply
+        default: preview
 
 permissions:
   contents: read
@@ -29,12 +33,18 @@ jobs:
     name: Migrate ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Loads secrets from the selected GitHub Environment:
+    # dev, qa, or prod
     environment: ${{ inputs.environment }}
 
+    # GitHub Secrets keep their existing LIQUIBASE_* names.
+    # Inside the runner, they are mapped to DB_* variables.
+    # This prevents Liquibase 5 environment-variable warnings.
     env:
-      LIQUIBASE_URL: ${{ secrets.LIQUIBASE_URL }}
-      LIQUIBASE_USERNAME: ${{ secrets.LIQUIBASE_USERNAME }}
-      LIQUIBASE_PASSWORD: ${{ secrets.LIQUIBASE_PASSWORD }}
+      DB_URL: ${{ secrets.LIQUIBASE_URL }}
+      DB_USERNAME: ${{ secrets.LIQUIBASE_USERNAME }}
+      DB_PASSWORD: ${{ secrets.LIQUIBASE_PASSWORD }}
 
     steps:
       - name: Check out repository
@@ -47,23 +57,52 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Verify required secrets
+      - name: Verify required database secrets
         shell: bash
         run: |
-          test -n "$LIQUIBASE_URL" || { echo "LIQUIBASE_URL is missing"; exit 1; }
-          test -n "$LIQUIBASE_USERNAME" || { echo "LIQUIBASE_USERNAME is missing"; exit 1; }
-          test -n "$LIQUIBASE_PASSWORD" || { echo "LIQUIBASE_PASSWORD is missing"; exit 1; }
+          if [ -z "$DB_URL" ]; then
+            echo "LIQUIBASE_URL is missing from the selected GitHub Environment."
+            exit 1
+          fi
 
-      - name: Validate changelog
-        run: mvn --batch-mode --no-transfer-progress liquibase:validate
+          if [ -z "$DB_USERNAME" ]; then
+            echo "LIQUIBASE_USERNAME is missing from the selected GitHub Environment."
+            exit 1
+          fi
 
-      - name: Show pending changes
-        run: mvn --batch-mode --no-transfer-progress liquibase:status -Dliquibase.verbose=true
+          if [ -z "$DB_PASSWORD" ]; then
+            echo "LIQUIBASE_PASSWORD is missing from the selected GitHub Environment."
+            exit 1
+          fi
 
+          echo "Required database secrets are configured."
+
+      - name: Validate Liquibase changelog
+        run: |
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:validate
+
+      - name: Show pending database changes
+        run: |
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:status \
+            -Dliquibase.verbose=true
+
+      # Generate SQL for both preview and apply modes.
+      # This gives you an artifact showing exactly what Liquibase
+      # intends to execute.
       - name: Generate migration SQL
         run: |
           mkdir -p generated-sql
-          mvn --batch-mode --no-transfer-progress liquibase:updateSQL \
+
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:updateSQL \
             -Dliquibase.migrationSqlOutputFile=generated-sql/update-${{ inputs.environment }}.sql
 
       - name: Upload generated SQL
@@ -72,12 +111,35 @@ jobs:
           name: liquibase-sql-${{ inputs.environment }}-${{ github.run_number }}
           path: generated-sql/*.sql
           retention-days: 14
+          if-no-files-found: error
 
+      # This is the step that actually creates or changes tables.
+      # It only runs when deployment_mode is "apply".
       - name: Apply migrations
-        if: ${{ !inputs.dry_run }}
-        run: mvn --batch-mode --no-transfer-progress liquibase:update
+        if: ${{ inputs.deployment_mode == 'apply' }}
+        run: |
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:update
 
       - name: Display migration history
-        if: ${{ !inputs.dry_run }}
-        run: mvn --batch-mode --no-transfer-progress liquibase:history
+        if: ${{ inputs.deployment_mode == 'apply' }}
+        run: |
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:history
 
+      - name: Preview completed
+        if: ${{ inputs.deployment_mode == 'preview' }}
+        run: |
+          echo "Preview completed successfully."
+          echo "No database changes were applied."
+          echo "Download the generated SQL artifact to review the migration."
+
+      - name: Deployment completed
+        if: ${{ inputs.deployment_mode == 'apply' }}
+        run: |
+          echo "Liquibase migrations were applied successfully."
+          echo "Target environment: ${{ inputs.environment }}"
