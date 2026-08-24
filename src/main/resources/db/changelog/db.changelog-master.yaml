@@ -1,0 +1,8 @@
+databaseChangeLog:
+  - include:
+      file: changes/001-create-app-users.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/002-add-case-insensitive-email-index.yaml
+      relativeToChangelogFile: true
+

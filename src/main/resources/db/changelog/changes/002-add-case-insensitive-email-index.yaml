@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-case-insensitive-email-index
+      author: database-team
+      labels: security-app
+      dbms: postgresql
+      comment: Guarantee that email addresses are unique regardless of letter case.
+      preConditions:
+        - onFail: HALT
+        - sqlCheck:
+            expectedResult: "0"
+            sql: |
+              SELECT COUNT(*)
+              FROM (
+                SELECT LOWER(email)
+                FROM app_users
+                GROUP BY LOWER(email)
+                HAVING COUNT(*) > 1
+              ) duplicate_emails
+      changes:
+        - sql:
+            sql: |
+              CREATE UNIQUE INDEX uk_app_users_email_lower
+              ON app_users (LOWER(email));
+      rollback:
+        - sql:
+            sql: DROP INDEX IF EXISTS uk_app_users_email_lower;
+

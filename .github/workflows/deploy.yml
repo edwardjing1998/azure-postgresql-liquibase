@@ -1,0 +1,83 @@
+name: Deploy database migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub Environment and target database
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      dry_run:
+        description: Generate SQL only; do not modify the database
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+
+    env:
+      LIQUIBASE_URL: ${{ secrets.LIQUIBASE_URL }}
+      LIQUIBASE_USERNAME: ${{ secrets.LIQUIBASE_USERNAME }}
+      LIQUIBASE_PASSWORD: ${{ secrets.LIQUIBASE_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Verify required secrets
+        shell: bash
+        run: |
+          test -n "$LIQUIBASE_URL" || { echo "LIQUIBASE_URL is missing"; exit 1; }
+          test -n "$LIQUIBASE_USERNAME" || { echo "LIQUIBASE_USERNAME is missing"; exit 1; }
+          test -n "$LIQUIBASE_PASSWORD" || { echo "LIQUIBASE_PASSWORD is missing"; exit 1; }
+
+      - name: Validate changelog
+        run: mvn --batch-mode --no-transfer-progress liquibase:validate
+
+      - name: Show pending changes
+        run: mvn --batch-mode --no-transfer-progress liquibase:status -Dliquibase.verbose=true
+
+      - name: Generate migration SQL
+        run: |
+          mkdir -p generated-sql
+          mvn --batch-mode --no-transfer-progress liquibase:updateSQL \
+            -Dliquibase.migrationSqlOutputFile=generated-sql/update-${{ inputs.environment }}.sql
+
+      - name: Upload generated SQL
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquibase-sql-${{ inputs.environment }}-${{ github.run_number }}
+          path: generated-sql/*.sql
+          retention-days: 14
+
+      - name: Apply migrations
+        if: ${{ !inputs.dry_run }}
+        run: mvn --batch-mode --no-transfer-progress liquibase:update
+
+      - name: Display migration history
+        if: ${{ !inputs.dry_run }}
+        run: mvn --batch-mode --no-transfer-progress liquibase:history
+
