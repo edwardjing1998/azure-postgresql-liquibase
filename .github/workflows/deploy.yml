@@ -34,13 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # Loads secrets from the selected GitHub Environment:
-    # dev, qa, or prod
     environment: ${{ inputs.environment }}
 
-    # GitHub Secrets keep their existing LIQUIBASE_* names.
-    # Inside the runner, they are mapped to DB_* variables.
-    # This prevents Liquibase 5 environment-variable warnings.
     env:
       DB_URL: ${{ secrets.LIQUIBASE_URL }}
       DB_USERNAME: ${{ secrets.LIQUIBASE_USERNAME }}
@@ -56,6 +51,18 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
+
+      # Sample users must only be inserted into DEV.
+      - name: Select Liquibase context
+        shell: bash
+        run: |
+          if [ "${{ inputs.environment }}" = "dev" ]; then
+            echo "DB_CONTEXTS=dev" >> "$GITHUB_ENV"
+            echo "DEV context enabled: sample users will be included."
+          else
+            echo "DB_CONTEXTS=" >> "$GITHUB_ENV"
+            echo "DEV context disabled: sample users will not be included."
+          fi
 
       - name: Verify required database secrets
         shell: bash
@@ -77,12 +84,20 @@ jobs:
 
           echo "Required database secrets are configured."
 
+      - name: Display selected configuration
+        shell: bash
+        run: |
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Deployment mode: ${{ inputs.deployment_mode }}"
+          echo "Liquibase contexts: $DB_CONTEXTS"
+
       - name: Validate Liquibase changelog
         run: |
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:validate
+            liquibase:validate \
+            -Dliquibase.contexts="$DB_CONTEXTS"
 
       - name: Show pending database changes
         run: |
@@ -90,11 +105,9 @@ jobs:
             --batch-mode \
             --no-transfer-progress \
             liquibase:status \
-            -Dliquibase.verbose=true
+            -Dliquibase.verbose=true \
+            -Dliquibase.contexts="$DB_CONTEXTS"
 
-      # Generate SQL for both preview and apply modes.
-      # This gives you an artifact showing exactly what Liquibase
-      # intends to execute.
       - name: Generate migration SQL
         run: |
           mkdir -p generated-sql
@@ -103,6 +116,7 @@ jobs:
             --batch-mode \
             --no-transfer-progress \
             liquibase:updateSQL \
+            -Dliquibase.contexts="$DB_CONTEXTS" \
             -Dliquibase.migrationSqlOutputFile=generated-sql/update-${{ inputs.environment }}.sql
 
       - name: Upload generated SQL
@@ -113,15 +127,17 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      # This is the step that actually creates or changes tables.
-      # It only runs when deployment_mode is "apply".
+      # This step actually modifies PostgreSQL.
       - name: Apply migrations
         if: ${{ inputs.deployment_mode == 'apply' }}
         run: |
+          echo "Applying Liquibase contexts: $DB_CONTEXTS"
+
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:update
+            liquibase:update \
+            -Dliquibase.contexts="$DB_CONTEXTS"
 
       - name: Display migration history
         if: ${{ inputs.deployment_mode == 'apply' }}
@@ -131,15 +147,28 @@ jobs:
             --no-transfer-progress \
             liquibase:history
 
+      - name: Verify database migrations
+        if: ${{ inputs.deployment_mode == 'apply' }}
+        run: |
+          echo "Checking for remaining pending changes."
+
+          mvn \
+            --batch-mode \
+            --no-transfer-progress \
+            liquibase:status \
+            -Dliquibase.verbose=true \
+            -Dliquibase.contexts="$DB_CONTEXTS"
+
       - name: Preview completed
         if: ${{ inputs.deployment_mode == 'preview' }}
         run: |
           echo "Preview completed successfully."
           echo "No database changes were applied."
-          echo "Download the generated SQL artifact to review the migration."
+          echo "Download the generated SQL artifact for review."
 
       - name: Deployment completed
         if: ${{ inputs.deployment_mode == 'apply' }}
         run: |
           echo "Liquibase migrations were applied successfully."
           echo "Target environment: ${{ inputs.environment }}"
+          echo "Liquibase contexts: $DB_CONTEXTS"
