@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-migrate-existing-user-roles
+      author: database-team
+      labels: security-app
+      dbms: postgresql
+      comment: Copy existing app_users.role values into the many-to-many table.
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO app_user_roles (user_id, role_id)
+              SELECT users.id, roles.id
+              FROM app_users users
+              JOIN app_roles roles ON roles.code = users.role
+              ON CONFLICT (user_id, role_id) DO NOTHING;
+      rollback:
+        - sql:
+            sql: |
+              DELETE FROM app_user_roles user_roles
+              USING app_users users, app_roles roles
+              WHERE user_roles.user_id = users.id
+                AND user_roles.role_id = roles.id
+                AND roles.code = users.role;
+

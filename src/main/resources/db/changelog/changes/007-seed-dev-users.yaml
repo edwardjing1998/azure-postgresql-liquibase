@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-seed-dev-users
+      author: database-team
+      labels: security-app
+      contextFilter: "@dev"
+      dbms: postgresql
+      comment: Insert development-only users and their role assignments.
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO app_users (name, email, password_hash, role)
+              SELECT
+                'Demo Admin',
+                'admin@example.com',
+                '$2b$12$xf.R9qrbc.Lzrod3jjbIlubMq3qEcwTwFYBBq9xLJq0yYxBE9xFDa',
+                'ADMIN'
+              WHERE NOT EXISTS (
+                SELECT 1 FROM app_users
+                WHERE LOWER(email) = LOWER('admin@example.com')
+              );
+
+              INSERT INTO app_users (name, email, password_hash, role)
+              SELECT
+                'Demo User',
+                'user@example.com',
+                '$2b$12$O/k13F0eadSyeYRiLuy.JeAWuTyEcKrv0Xgu3L1J0gHyxcTilmgf.',
+                'USER'
+              WHERE NOT EXISTS (
+                SELECT 1 FROM app_users
+                WHERE LOWER(email) = LOWER('user@example.com')
+              );
+
+              INSERT INTO app_user_roles (user_id, role_id)
+              SELECT users.id, roles.id
+              FROM app_users users
+              CROSS JOIN app_roles roles
+              WHERE LOWER(users.email) = LOWER('admin@example.com')
+                AND roles.code IN ('USER', 'ADMIN')
+              ON CONFLICT (user_id, role_id) DO NOTHING;
+
+              INSERT INTO app_user_roles (user_id, role_id)
+              SELECT users.id, roles.id
+              FROM app_users users
+              CROSS JOIN app_roles roles
+              WHERE LOWER(users.email) = LOWER('user@example.com')
+                AND roles.code = 'USER'
+              ON CONFLICT (user_id, role_id) DO NOTHING;
+      rollback:
+        - sql:
+            sql: |
+              DELETE FROM app_users
+              WHERE LOWER(email) IN (
+                LOWER('admin@example.com'),
+                LOWER('user@example.com')
+              );
+

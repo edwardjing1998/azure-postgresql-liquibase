@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-app-user-roles
+      author: database-team
+      labels: security-app
+      comment: Create the many-to-many association between users and roles.
+      changes:
+        - createTable:
+            tableName: app_user_roles
+            columns:
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: assigned_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: app_user_roles
+            columnNames: user_id, role_id
+            constraintName: pk_app_user_roles
+        - addForeignKeyConstraint:
+            baseTableName: app_user_roles
+            baseColumnNames: user_id
+            referencedTableName: app_users
+            referencedColumnNames: id
+            constraintName: fk_app_user_roles_user
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: app_user_roles
+            baseColumnNames: role_id
+            referencedTableName: app_roles
+            referencedColumnNames: id
+            constraintName: fk_app_user_roles_role
+            onDelete: CASCADE
+        - createIndex:
+            tableName: app_user_roles
+            indexName: ix_app_user_roles_role_id
+            columns:
+              - column:
+                  name: role_id
+      rollback:
+        - dropTable:
+            tableName: app_user_roles
+

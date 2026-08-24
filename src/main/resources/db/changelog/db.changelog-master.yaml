@@ -5,4 +5,18 @@ databaseChangeLog:
   - include:
       file: changes/002-add-case-insensitive-email-index.yaml
       relativeToChangelogFile: true
-
+  - include:
+      file: changes/003-create-app-roles.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/004-create-app-user-roles.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/005-seed-standard-roles.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/006-migrate-existing-user-roles.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/007-seed-dev-users.yaml
+      relativeToChangelogFile: true

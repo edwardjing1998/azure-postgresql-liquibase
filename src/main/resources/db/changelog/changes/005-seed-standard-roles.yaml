@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-seed-standard-roles
+      author: database-team
+      labels: security-app
+      comment: Insert the standard roles required in every environment.
+      changes:
+        - insert:
+            tableName: app_roles
+            columns:
+              - column:
+                  name: code
+                  value: USER
+              - column:
+                  name: name
+                  value: Standard User
+              - column:
+                  name: description
+                  value: Access to authenticated user features.
+        - insert:
+            tableName: app_roles
+            columns:
+              - column:
+                  name: code
+                  value: ADMIN
+              - column:
+                  name: name
+                  value: Administrator
+              - column:
+                  name: description
+                  value: Administrative access to protected features.
+      rollback:
+        - delete:
+            tableName: app_roles
+            where: code IN ('USER', 'ADMIN')
+
