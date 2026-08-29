@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+            http://www.liquibase.org/xml/ns/dbchangelog
+            https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet
+            id="008-create-user-uploaded-files"
+            author="database-team"
+            labels="security-app,upload-app">
+
+        <comment>
+            Create the table that associates authenticated users with files
+            uploaded to Azure Blob Storage.
+        </comment>
+
+        <createTable tableName="user_uploaded_files">
+
+            <column
+                    name="id"
+                    type="BIGINT"
+                    autoIncrement="true">
+                <constraints
+                        primaryKey="true"
+                        primaryKeyName="pk_user_uploaded_files"
+                        nullable="false"/>
+            </column>
+
+            <column
+                    name="user_id"
+                    type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="upload_session_id"
+                    type="UUID">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="file_id"
+                    type="UUID">
+                <constraints
+                        nullable="false"
+                        unique="true"
+                        uniqueConstraintName="uk_user_uploaded_files_file_id"/>
+            </column>
+
+            <column
+                    name="original_file_name"
+                    type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="relative_path"
+                    type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="content_type"
+                    type="VARCHAR(255)"/>
+
+            <column
+                    name="file_size_bytes"
+                    type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="storage_account_name"
+                    type="VARCHAR(63)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="container_name"
+                    type="VARCHAR(63)">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="blob_name"
+                    type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="blob_url"
+                    type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="blob_etag"
+                    type="VARCHAR(255)"/>
+
+            <column
+                    name="blob_version_id"
+                    type="TEXT"/>
+
+            <column
+                    name="checksum_sha256"
+                    type="VARCHAR(64)"/>
+
+            <column
+                    name="status"
+                    type="VARCHAR(20)"
+                    defaultValue="UPLOADING">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="uploaded_at"
+                    type="TIMESTAMP WITH TIME ZONE"/>
+
+            <column
+                    name="created_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+
+            <column
+                    name="updated_at"
+                    type="TIMESTAMP WITH TIME ZONE"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="user_uploaded_files"
+                baseColumnNames="user_id"
+                referencedTableName="app_users"
+                referencedColumnNames="id"
+                constraintName="fk_user_uploaded_files_user"
+                onDelete="RESTRICT"/>
+
+        <createIndex
+                tableName="user_uploaded_files"
+                indexName="ix_user_uploaded_files_user_uploaded_at">
+            <column name="user_id"/>
+            <column name="uploaded_at" descending="true"/>
+        </createIndex>
+
+        <createIndex
+                tableName="user_uploaded_files"
+                indexName="ix_user_uploaded_files_session">
+            <column name="upload_session_id"/>
+        </createIndex>
+
+        <createIndex
+                tableName="user_uploaded_files"
+                indexName="ix_user_uploaded_files_status">
+            <column name="status"/>
+        </createIndex>
+
+        <sql dbms="postgresql">
+            ALTER TABLE user_uploaded_files
+                ADD CONSTRAINT chk_user_uploaded_files_size
+                    CHECK (file_size_bytes &gt;= 0);
+        </sql>
+
+        <sql dbms="postgresql">
+            ALTER TABLE user_uploaded_files
+                ADD CONSTRAINT chk_user_uploaded_files_status
+                    CHECK (
+                        status IN (
+                                   'UPLOADING',
+                                   'COMPLETED',
+                                   'FAILED',
+                                   'DELETED'
+                            )
+                        );
+        </sql>
+
+        <rollback>
+            <dropTable
+                    tableName="user_uploaded_files"
+                    cascadeConstraints="true"/>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>
