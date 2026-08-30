@@ -27,4 +27,4 @@ databaseChangeLog:
       file: changes/009-create-upload-sessions.xml
       relativeToChangelogFile: true
   - include:
-      file: changelog/010-add-user-upload-file-tracking-columns.xml
+      file: changes/010-add-user-upload-file-tracking-columns.xml
