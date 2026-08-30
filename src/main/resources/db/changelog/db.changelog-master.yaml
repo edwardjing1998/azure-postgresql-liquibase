@@ -28,3 +28,4 @@ databaseChangeLog:
       relativeToChangelogFile: true
   - include:
       file: changes/010-add-user-upload-file-tracking-columns.xml
+      relativeToChangelogFile: true
