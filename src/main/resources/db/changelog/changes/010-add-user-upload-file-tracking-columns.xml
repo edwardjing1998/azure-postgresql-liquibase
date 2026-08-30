@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+        http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet
+            id="010-add-error-message-to-user-uploaded-files"
+            author="edward">
+
+        <preConditions onFail="HALT">
+            <tableExists tableName="user_uploaded_files"/>
+            <not>
+                <columnExists
+                        tableName="user_uploaded_files"
+                        columnName="error_message"/>
+            </not>
+        </preConditions>
+
+        <addColumn tableName="user_uploaded_files">
+            <column
+                    name="error_message"
+                    type="VARCHAR(2000)"/>
+        </addColumn>
+
+        <rollback>
+            <dropColumn
+                    tableName="user_uploaded_files"
+                    columnName="error_message"/>
+        </rollback>
+
+    </changeSet>
+
+</databaseChangeLog>
