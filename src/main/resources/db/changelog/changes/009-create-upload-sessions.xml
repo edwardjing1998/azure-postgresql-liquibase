@@ -8,7 +8,7 @@
         https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
     <changeSet
-            id="008-create-upload-sessions"
+            id="009-create-upload-sessions"
             author="edward">
 
         <createTable tableName="upload_sessions">
@@ -77,20 +77,32 @@
 
         </createIndex>
 
-        <addCheckConstraint
-                tableName="upload_sessions"
-                constraintName="chk_upload_sessions_expected_files"
-                constraintBody="expected_files &gt;= 0"/>
+        <sql dbms="postgresql">
+            ALTER TABLE upload_sessions
+                ADD CONSTRAINT chk_upload_sessions_expected_files
+                    CHECK (expected_files &gt;= 0)
+        </sql>
 
-        <addCheckConstraint
-                tableName="upload_sessions"
-                constraintName="chk_upload_sessions_expected_bytes"
-                constraintBody="expected_bytes &gt;= 0"/>
+        <sql dbms="postgresql">
+            ALTER TABLE upload_sessions
+                ADD CONSTRAINT chk_upload_sessions_expected_bytes
+                    CHECK (expected_bytes &gt;= 0)
+        </sql>
 
-        <addCheckConstraint
-                tableName="upload_sessions"
-                constraintName="chk_upload_sessions_status"
-                constraintBody="status IN ('CREATED', 'UPLOADING', 'COMPLETED', 'EXPIRED', 'FAILED')"/>
+        <sql dbms="postgresql">
+            ALTER TABLE upload_sessions
+                ADD CONSTRAINT chk_upload_sessions_status
+                    CHECK (
+                        status IN (
+                                   'CREATED',
+                                   'UPLOADING',
+                                   'COMPLETED',
+                                   'PARTIALLY_COMPLETED',
+                                   'CANCELLED',
+                                   'EXPIRED'
+                            )
+                        )
+        </sql>
 
         <rollback>
             <dropTable
