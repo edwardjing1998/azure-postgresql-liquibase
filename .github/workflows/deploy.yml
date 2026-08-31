@@ -41,6 +41,10 @@ jobs:
       DB_USERNAME: ${{ secrets.LIQUIBASE_USERNAME }}
       DB_PASSWORD: ${{ secrets.LIQUIBASE_PASSWORD }}
 
+      # Always execute the master changelog.
+      LIQUIBASE_CHANGELOG:
+        src/main/resources/db/changelog/db.changelog-master.xml
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -84,29 +88,55 @@ jobs:
 
           echo "Required database secrets are configured."
 
+      - name: Verify master changelog
+        shell: bash
+        run: |
+          if [ ! -f "$LIQUIBASE_CHANGELOG" ]; then
+            echo "Master changelog does not exist:"
+            echo "$LIQUIBASE_CHANGELOG"
+            exit 1
+          fi
+
+          echo "Using master changelog:"
+          echo "$LIQUIBASE_CHANGELOG"
+
+      - name: Verify retry-count migration is included
+        shell: bash
+        run: |
+          if ! grep -Fq "011-add-retry-count.xml" "$LIQUIBASE_CHANGELOG"; then
+            echo "011-add-retry-count.xml is not included in:"
+            echo "$LIQUIBASE_CHANGELOG"
+            exit 1
+          fi
+
+          echo "011-add-retry-count.xml is included by the master changelog."
+
       - name: Display selected configuration
         shell: bash
         run: |
           echo "Environment: ${{ inputs.environment }}"
           echo "Deployment mode: ${{ inputs.deployment_mode }}"
           echo "Liquibase contexts: $DB_CONTEXTS"
+          echo "Master changelog: $LIQUIBASE_CHANGELOG"
 
       - name: Validate Liquibase changelog
         run: |
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:validate \
-            -Dliquibase.contexts="$DB_CONTEXTS"
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
+            -Dliquibase.contexts="$DB_CONTEXTS" \
+            liquibase:validate
 
       - name: Show pending database changes
         run: |
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:status \
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
             -Dliquibase.verbose=true \
-            -Dliquibase.contexts="$DB_CONTEXTS"
+            -Dliquibase.contexts="$DB_CONTEXTS" \
+            liquibase:status
 
       - name: Generate migration SQL
         run: |
@@ -115,9 +145,10 @@ jobs:
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:updateSQL \
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
             -Dliquibase.contexts="$DB_CONTEXTS" \
-            -Dliquibase.migrationSqlOutputFile=generated-sql/update-${{ inputs.environment }}.sql
+            -Dliquibase.migrationSqlOutputFile="generated-sql/update-${{ inputs.environment }}.sql" \
+            liquibase:updateSQL
 
       - name: Upload generated SQL
         uses: actions/upload-artifact@v4
@@ -127,17 +158,19 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      # This step actually modifies PostgreSQL.
+      # This is the only step that changes PostgreSQL.
       - name: Apply migrations
         if: ${{ inputs.deployment_mode == 'apply' }}
         run: |
           echo "Applying Liquibase contexts: $DB_CONTEXTS"
+          echo "Applying master changelog: $LIQUIBASE_CHANGELOG"
 
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:update \
-            -Dliquibase.contexts="$DB_CONTEXTS"
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
+            -Dliquibase.contexts="$DB_CONTEXTS" \
+            liquibase:update
 
       - name: Display migration history
         if: ${{ inputs.deployment_mode == 'apply' }}
@@ -145,6 +178,7 @@ jobs:
           mvn \
             --batch-mode \
             --no-transfer-progress \
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
             liquibase:history
 
       - name: Verify database migrations
@@ -155,9 +189,10 @@ jobs:
           mvn \
             --batch-mode \
             --no-transfer-progress \
-            liquibase:status \
+            -Dliquibase.changeLogFile="$LIQUIBASE_CHANGELOG" \
             -Dliquibase.verbose=true \
-            -Dliquibase.contexts="$DB_CONTEXTS"
+            -Dliquibase.contexts="$DB_CONTEXTS" \
+            liquibase:status
 
       - name: Preview completed
         if: ${{ inputs.deployment_mode == 'preview' }}
