@@ -43,7 +43,7 @@ jobs:
 
       # Always execute the master changelog.
       LIQUIBASE_CHANGELOG:
-        src/main/resources/db/changelog/db.changelog-master.xml
+        src/main/resources/db/changelog/db.changelog-master.yaml
 
     steps:
       - name: Check out repository
