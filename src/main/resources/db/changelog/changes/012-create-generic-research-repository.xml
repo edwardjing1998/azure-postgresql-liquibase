@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Standalone PostgreSQL research repository migration.
+         Requires no preceding project-specific research migrations.
+         Install after existing changelogs 001 through 011.
+         All tables reside in the configured Liquibase default schema. -->
+
+    <!-- 1: Research request, report, and generation metadata -->
+    <changeSet id="012-01-create-research-reports" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_reports">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_reports" nullable="false"/>
+            </column>
+            <column name="openai_response_id" type="VARCHAR(200)"/>
+            <column name="extraction_response_id" type="VARCHAR(200)"/>
+            <column name="research_question" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="research_level" type="VARCHAR(30)"/>
+            <column name="research_category" type="VARCHAR(100)"/>
+            <column name="model" type="VARCHAR(100)"/>
+            <column name="extraction_model" type="VARCHAR(100)"/>
+            <column name="status" type="VARCHAR(30)" defaultValue="completed">
+                <constraints nullable="false"/>
+            </column>
+            <column name="answer_markdown" type="TEXT"/>
+            <column name="input_tokens" type="BIGINT"/>
+            <column name="output_tokens" type="BIGINT"/>
+            <column name="total_tokens" type="BIGINT"/>
+            <column name="metadata" type="JSONB" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="research_reports" columnNames="openai_response_id"
+                             constraintName="uq_research_reports_openai_response_id"/>
+        <createIndex tableName="research_reports" indexName="ix_research_reports_category">
+            <column name="research_category"/>
+        </createIndex>
+        <createIndex tableName="research_reports" indexName="ix_research_reports_created_at">
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="research_reports"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 2: Generic structured record, independent of subject matter -->
+    <changeSet id="012-02-create-research-records" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_records">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_records" nullable="false"/>
+            </column>
+            <column name="report_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="record_type" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="summary" type="TEXT"/>
+            <column name="category" type="VARCHAR(100)"/>
+            <column name="subject_name" type="TEXT"/>
+            <column name="evidence_type" type="VARCHAR(30)"/>
+            <column name="evidence_summary" type="TEXT"/>
+            <column name="attributes" type="JSONB" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_records" baseColumnNames="report_id"
+                                 referencedTableName="research_reports" referencedColumnNames="id"
+                                 constraintName="fk_research_records_report" onDelete="CASCADE"/>
+        <!-- Composite uniqueness supports report-scoped evidence and relations. -->
+        <addUniqueConstraint tableName="research_records" columnNames="report_id,id"
+                             constraintName="uq_research_records_report_id"/>
+        <createIndex tableName="research_records" indexName="ix_research_records_type">
+            <column name="record_type"/>
+        </createIndex>
+        <createIndex tableName="research_records" indexName="ix_research_records_category">
+            <column name="category"/>
+        </createIndex>
+        <createIndex tableName="research_records" indexName="ix_research_records_evidence_type">
+            <column name="evidence_type"/>
+        </createIndex>
+        <sql><![CDATA[
+            ALTER TABLE research_records
+            ADD CONSTRAINT chk_research_records_evidence_type
+            CHECK (evidence_type IS NULL OR evidence_type IN
+                  ('confirmed', 'job_supported', 'inference', 'unverified'));
+            CREATE INDEX ix_research_records_attributes
+                ON research_records USING GIN (attributes);
+        ]]></sql>
+        <rollback>
+            <dropTable tableName="research_records" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 3: Source URLs and optional bibliographic details -->
+    <changeSet id="012-03-create-research-sources" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_sources">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_sources" nullable="false"/>
+            </column>
+            <column name="report_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_type" type="VARCHAR(100)"/>
+            <column name="title" type="TEXT"/>
+            <column name="url" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="publisher" type="VARCHAR(255)"/>
+            <column name="publication_date" type="DATE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_sources" baseColumnNames="report_id"
+                                 referencedTableName="research_reports" referencedColumnNames="id"
+                                 constraintName="fk_research_sources_report" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="research_sources" columnNames="report_id,url"
+                             constraintName="uq_research_sources_report_url"/>
+        <addUniqueConstraint tableName="research_sources" columnNames="report_id,id"
+                             constraintName="uq_research_sources_report_id"/>
+        <createIndex tableName="research_sources" indexName="ix_research_sources_type">
+            <column name="source_type"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="research_sources" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 4: Evidence linking a record to a source within the same report -->
+    <changeSet id="012-04-create-research-record-sources" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_record_sources">
+            <column name="report_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="record_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="evidence_note" type="TEXT"/>
+        </createTable>
+        <addPrimaryKey tableName="research_record_sources" columnNames="record_id,source_id"
+                       constraintName="pk_research_record_sources"/>
+        <addForeignKeyConstraint baseTableName="research_record_sources" baseColumnNames="report_id,record_id"
+                                 referencedTableName="research_records" referencedColumnNames="report_id,id"
+                                 constraintName="fk_research_record_sources_record" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="research_record_sources" baseColumnNames="report_id,source_id"
+                                 referencedTableName="research_sources" referencedColumnNames="report_id,id"
+                                 constraintName="fk_research_record_sources_source" onDelete="CASCADE"/>
+        <createIndex tableName="research_record_sources" indexName="ix_research_record_sources_report">
+            <column name="report_id"/>
+        </createIndex>
+        <createIndex tableName="research_record_sources" indexName="ix_research_record_sources_source">
+            <column name="source_id"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="research_record_sources" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 5: Technology tags, industries, topics, keywords, and other labels -->
+    <changeSet id="012-05-create-research-record-tags" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_record_tags">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_record_tags" nullable="false"/>
+            </column>
+            <column name="record_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tag_type" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tag_value" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_record_tags" baseColumnNames="record_id"
+                                 referencedTableName="research_records" referencedColumnNames="id"
+                                 constraintName="fk_research_record_tags_record" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="research_record_tags" columnNames="record_id,tag_type,tag_value"
+                             constraintName="uq_research_record_tags_triplet"/>
+        <createIndex tableName="research_record_tags" indexName="ix_research_record_tags_lookup">
+            <column name="tag_type"/>
+            <column name="tag_value"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="research_record_tags" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+    <!-- 6: Relationship graph, scoped to one research report -->
+    <changeSet id="012-06-create-research-record-relations" author="database-team" dbms="postgresql" labels="research-app">
+        <createTable tableName="research_record_relations">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_record_relations" nullable="false"/>
+            </column>
+            <column name="report_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_record_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_record_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="relationship_type" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT"/>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_record_relations" baseColumnNames="report_id,source_record_id"
+                                 referencedTableName="research_records" referencedColumnNames="report_id,id"
+                                 constraintName="fk_research_record_relations_source" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableName="research_record_relations" baseColumnNames="report_id,target_record_id"
+                                 referencedTableName="research_records" referencedColumnNames="report_id,id"
+                                 constraintName="fk_research_record_relations_target" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="research_record_relations"
+                             columnNames="source_record_id,target_record_id,relationship_type"
+                             constraintName="uq_research_record_relations_triplet"/>
+        <createIndex tableName="research_record_relations" indexName="ix_research_record_relations_target">
+            <column name="target_record_id"/>
+        </createIndex>
+        <createIndex tableName="research_record_relations" indexName="ix_research_record_relations_report">
+            <column name="report_id"/>
+        </createIndex>
+        <sql><![CDATA[
+            ALTER TABLE research_record_relations
+            ADD CONSTRAINT chk_research_record_relations_distinct
+            CHECK (source_record_id <> target_record_id);
+        ]]></sql>
+        <rollback>
+            <dropTable tableName="research_record_relations" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

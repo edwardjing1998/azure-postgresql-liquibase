@@ -32,3 +32,6 @@ databaseChangeLog:
   - include:
       file: changes/011-add-retry-count.xml
       relativeToChangelogFile: true
+  - include:
+      file: changes/012-create-generic-research-repository.xml
+      relativeToChangelogFile: true
