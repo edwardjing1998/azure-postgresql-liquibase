@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- One evidence document per research record and exact URL. A source may
+         support several deep_research findings; avoid duplicating its summary. -->
+    <changeSet id="013-01-create-research-evidence-sources" author="database-team" dbms="postgresql" labels="research-app,evidence">
+        <createTable tableName="research_evidence_sources">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_evidence_sources" nullable="false"/>
+            </column>
+            <column name="record_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_url" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="normalized_url" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="final_url" type="TEXT"/>
+            <column name="source_title" type="TEXT"/>
+            <column name="content_type" type="VARCHAR(100)"/>
+            <column name="content_hash" type="VARCHAR(64)"/>
+            <column name="content_storage_uri" type="TEXT"/>
+            <column name="retrieved_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_evidence_sources" baseColumnNames="record_id"
+                                 referencedTableName="research_records" referencedColumnNames="id"
+                                 constraintName="fk_research_evidence_sources_record" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="research_evidence_sources" columnNames="record_id,normalized_url"
+                             constraintName="uq_research_evidence_sources_record_url"/>
+        <createIndex tableName="research_evidence_sources" indexName="ix_research_evidence_sources_record">
+            <column name="record_id"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="research_evidence_sources" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+
+    <!-- Versioned summary: source_id + version uniquely identifies an AI result.
+         Approval is per summary version, not automatically shared with later generations. -->
+    <changeSet id="013-02-create-research-evidence-summaries" author="database-team" dbms="postgresql" labels="research-app,evidence">
+        <createTable tableName="research_evidence_summaries">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_evidence_summaries" nullable="false"/>
+            </column>
+            <column name="source_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="INTEGER" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="summary" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="technologies" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="key_findings" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="limitations" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="related_pages" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="related_videos" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ai_model" type="VARCHAR(150)"/>
+            <column name="prompt_version" type="VARCHAR(100)"/>
+            <column name="approval_status" type="VARCHAR(30)" defaultValue="draft">
+                <constraints nullable="false"/>
+            </column>
+            <column name="approved_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableName="research_evidence_summaries" baseColumnNames="source_id"
+                                 referencedTableName="research_evidence_sources" referencedColumnNames="id"
+                                 constraintName="fk_research_evidence_summaries_source" onDelete="CASCADE"/>
+        <addUniqueConstraint tableName="research_evidence_summaries" columnNames="source_id,version"
+                             constraintName="uq_research_evidence_summaries_version"/>
+        <createIndex tableName="research_evidence_summaries" indexName="ix_research_evidence_summaries_source">
+            <column name="source_id"/>
+        </createIndex>
+        <createIndex tableName="research_evidence_summaries" indexName="ix_research_evidence_summaries_approval">
+            <column name="approval_status"/>
+        </createIndex>
+        <sql><![CDATA[
+            ALTER TABLE research_evidence_summaries
+            ADD CONSTRAINT chk_research_evidence_summaries_approval
+            CHECK (approval_status IN ('draft', 'reviewed', 'approved', 'rejected'));
+            ALTER TABLE research_evidence_summaries
+            ADD CONSTRAINT chk_research_evidence_summaries_version
+            CHECK (version >= 1);
+        ]]></sql>
+        <rollback>
+            <dropTable tableName="research_evidence_summaries" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

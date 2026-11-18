@@ -35,3 +35,6 @@ databaseChangeLog:
   - include:
       file: changes/012-create-generic-research-repository.xml
       relativeToChangelogFile: true
+  - include:
+      file: changes/013-create-research-evidence-tables.xml
+      relativeToChangelogFile: true
