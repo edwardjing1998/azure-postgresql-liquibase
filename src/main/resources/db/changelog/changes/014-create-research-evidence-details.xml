@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Detailed research is a separately versioned artifact for an evidence source.
+         summary_id references the exact summary version used as context. It is
+         intentionally nullable for future independent research generation.
+         The application must verify that summary_id belongs to source_id. -->
+    <changeSet id="014-01-create-research-evidence-details" author="database-team" dbms="postgresql" labels="research-app,evidence">
+        <createTable tableName="research_evidence_details">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_research_evidence_details" nullable="false"/>
+            </column>
+            <column name="source_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="summary_id" type="BIGINT"/>
+            <column name="version" type="INTEGER" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Structured sections, claims, citations and limitations. -->
+            <column name="detailed_content" type="JSONB" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Human-readable detailed research; separate from published topic Markdown. -->
+            <column name="content_markdown" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- SHA-256 of extracted HTML/PDF text at generation time, if available. -->
+            <column name="source_content_hash" type="VARCHAR(64)"/>
+            <column name="ai_model" type="VARCHAR(150)"/>
+            <column name="prompt_version" type="VARCHAR(100)"/>
+            <column name="approval_status" type="VARCHAR(30)" defaultValue="draft">
+                <constraints nullable="false"/>
+            </column>
+            <column name="approved_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+            baseTableName="research_evidence_details" baseColumnNames="source_id"
+            referencedTableName="research_evidence_sources" referencedColumnNames="id"
+            constraintName="fk_research_evidence_details_source" onDelete="CASCADE"/>
+        <addForeignKeyConstraint
+            baseTableName="research_evidence_details" baseColumnNames="summary_id"
+            referencedTableName="research_evidence_summaries" referencedColumnNames="id"
+            constraintName="fk_research_evidence_details_summary" onDelete="SET NULL"/>
+
+        <addUniqueConstraint tableName="research_evidence_details" columnNames="source_id,version"
+                             constraintName="uq_research_evidence_details_version"/>
+        <createIndex tableName="research_evidence_details" indexName="ix_research_evidence_details_source">
+            <column name="source_id"/>
+        </createIndex>
+        <createIndex tableName="research_evidence_details" indexName="ix_research_evidence_details_summary">
+            <column name="summary_id"/>
+        </createIndex>
+        <createIndex tableName="research_evidence_details" indexName="ix_research_evidence_details_approval">
+            <column name="approval_status"/>
+        </createIndex>
+
+        <sql><![CDATA[
+            ALTER TABLE research_evidence_details
+                ADD CONSTRAINT chk_research_evidence_details_version
+                CHECK (version >= 1);
+            ALTER TABLE research_evidence_details
+                ADD CONSTRAINT chk_research_evidence_details_approval
+                CHECK (approval_status IN ('draft', 'reviewed', 'approved', 'rejected'));
+            ALTER TABLE research_evidence_details
+                ADD CONSTRAINT chk_research_evidence_details_content_type
+                CHECK (jsonb_typeof(detailed_content) = 'object');
+            ALTER TABLE research_evidence_details
+                ADD CONSTRAINT chk_research_evidence_details_content_hash
+                CHECK (source_content_hash IS NULL OR source_content_hash ~ '^[0-9a-fA-F]{64}$');
+        ]]></sql>
+
+        <rollback>
+            <dropTable tableName="research_evidence_details" cascadeConstraints="true"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
